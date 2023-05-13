@@ -1,0 +1,30 @@
+#!/bin/bash
+
+function HelpMessage()
+{
+        echo "Este utilitário serve apenas para restaurar uma base de dados em formato .pgbkp dentro de um container Docker já existente"
+	echo
+	echo "Syntax: resdb [docker-container-name] [postgres-user] [database-name] [pgbkp-filename]"
+	echo
+}
+
+
+while getopts ":h" option; do
+   case $option in
+      h) # display Help
+         HelpMessage
+         exit;;
+   esac
+done
+
+docker exec $1 psql -U $2 -c "SELECT pg_terminate_backend(pg_stat_activity.pid)
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = '$3'
+  AND pid <> pg_backend_pid();"
+docker exec $1 dropdb -U $2 $3
+docker exec $1 psql -U $2 -c "CREATE DATABASE $3;"
+docker exec $1 rm -rf /backups
+docker exec $1 mkdir /backups
+docker cp $4 $1:/backups/$(basename $4)
+docker exec -it $1 pg_restore -U $2 --no-owner --no-acl -d $3 /backups/$(basename $4)
+docker exec $1 rm /backups/$(basename $4)
